@@ -1,0 +1,599 @@
+
+
+
+```{r setup, include=FALSE}
+
+  # Load package
+  pacman::p_load(
+    fixest,
+    modelsummary,
+    margins,
+    wooldridge,
+    AER,
+    janitor,
+    kableExtra,
+    tidyverse,
+    haven,
+    patchwork,
+    ggplot2,
+    jtools,
+    lme4,
+    psych,
+    stringi,
+    dplyr,
+    corrplot, 
+    stargazer,
+    ggcorrplot,
+    reshape2,
+    DT,
+    ggeffects,
+    tinytex,
+    alpaca
+  )
+
+library(htmltools)
+
+
+```
+
+
+
+
+# Load the dataset:
+
+```{r, echo = T, eval=T}
+
+# load data
+
+ df <- read.csv("/.../data_5R_26May.csv")
+
+```
+
+
+
+## Split the dataset into two groups of move toward and move away:
+
+```{r}
+
+  df_p <- df %>% 
+  filter( (peer_move_similarity > 0) &  (year_modified >= 2001) & (year_modified <= 2021))
+
+  df_n <- df %>% 
+  filter( (peer_move_similarity < 0) &  (year_modified >= 2001) & (year_modified <= 2021) )
+
+```
+
+
+# Summary: 
+We run four regressions based on different datasets and different models. The first three are without the dummy variable of "move_toward." 
+The first one includes the entire dataset. The second data contains those peers moving toward the focal firm, and the third is the opposite. 
+The fourth model considers the dummy variable. 
+In the end, I graph the moderation impacts, and common analysts and heterogeneity (homogeneity) could strongly change the slope sign. 
+
+```{r}
+
+df <- df %>% mutate(peer_move_similarity_move_away = peer_move_similarity * move_away)
+df <- df %>% mutate(peer_move_similarity_move_toward = peer_move_similarity * move_toward)
+
+df <- df %>% mutate(peer_move_similarity_move_away_t2 = peer_move_similarity_t2 * move_away_t2)
+df <- df %>% mutate(peer_move_similarity_move_toward_t2 = peer_move_similarity_t2 * move_toward_t2)
+
+df_2001 <- df %>% filter( (year_modified >= 2001) & (year_modified <= 2021) )
+
+
+```
+
+
+
+# Move_away:
+```{r}
+
+    # GVKEY.focal + GVKEY.peer
+
+models <- list (
+    
+  "Model 1" = feols (focal_move_similarity ~ 
+  roa_win_x + roa_rel +   log_at_win_x + log_at_rel_win + 
+  slack_avail_win_x + slack_avail_win_y + 
+  rd_intensity_win_x + rd_intensity_win_y + 
+   meanrec_diff_90_previous_focal 	+ car3 + strategy_unique_peer + strategy_unique_focal + sales_growth_naicsh4_win_x + hhi_naicsh4_inv_win_x +
+   similarity_f0_p0  + typicality_4_focal_t1   + typicality_4_focal_t2 + avg_change_size_3y_focal + 
+  moving_toward_industry   | GVKEY.focal + year_modified , data= df_2001,  vcov = "hetero"),
+
+   "Model 2" = feols (focal_move_similarity ~ car3 + sales_growth_naicsh4_win_x + 
+  peer_move_similarity_move_away  	  + meanrec_diff_90_previous_focal  + hhi_naicsh4_inv_win_x + 
+  +   rd_intensity_win_x + rd_intensity_win_y + typicality_4_focal_t1   + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  log_at_win_x + log_at_rel_win + 
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + 
+  similarity_f0_p0   | GVKEY.focal + year_modified , data= df_2001, vcov = "hetero"
+   ),
+   
+  "Model 3" = feols (focal_move_similarity ~ 
+  peer_move_similarity_move_away  	  + meanrec_diff_90_previous_focal  + hhi_naicsh4_inv_win_x + sales_growth_naicsh4_win_x + 
+    up_after_360 * peer_move_similarity_move_away + up_after_360 +  rd_intensity_win_x + rd_intensity_win_y + 
+  log_at_win_x + log_at_rel_win + typicality_4_focal_t1    + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + car3 + 
+  similarity_f0_p0  | GVKEY.focal + year_modified , data= df_2001, vcov = "hetero"
+   ),
+
+      "Model 4" = feols (focal_move_similarity ~ car3 + 
+  peer_move_similarity_move_away   + meanrec_diff_90_previous_focal  +  hhi_naicsh4_inv_win_x + sales_growth_naicsh4_win_x + 
+    analysts_peer_number * peer_move_similarity_move_away + analysts_peer_number  +   rd_intensity_win_x + rd_intensity_win_y + 
+  log_at_win_x + log_at_rel_win + typicality_4_focal_t1    + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + 
+  similarity_f0_p0   | GVKEY.focal + year_modified , data= df_2001, vcov = "hetero"
+   ),
+  
+   "Model 5" = feols (focal_move_similarity ~ car3 + 
+  peer_move_similarity_move_away	 	  + meanrec_diff_90_previous_focal   + hhi_naicsh4_inv_win_x + sales_growth_naicsh4_win_x + 
+     rd_intensity_win_x + rd_intensity_win_y + common_analysts_focal + typicality_4_focal_t1   + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  log_at_win_x + log_at_rel_win + common_analysts_focal * peer_move_similarity_move_away  + 
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + 
+  similarity_f0_p0  | GVKEY.focal + year_modified , data= df_2001, vcov = "hetero"
+   ),  
+
+   "Model 6" = feols (focal_move_similarity ~  car3 + sales_growth_naicsh4_win_x + 
+   peer_move_similarity_move_away 	  + meanrec_diff_90_previous_focal+ 
+        peer_move_similarity_move_away * up_after_360  + typicality_4_focal_t1   + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  common_analysts_focal * peer_move_similarity_move_away   + 
+  peer_move_similarity_move_away * analysts_peer_number + 
+  analysts_peer_number + up_after_360 + 
+  log_at_win_x + log_at_rel_win + hhi_naicsh4_inv_win_x + 
+  slack_avail_win_x + slack_avail_win_y  + roa_rel + common_analysts_focal +   
+
+   + similarity_f0_p0 + roa_win_x +  
+     moving_toward_industry 
+    + rd_intensity_win_x + rd_intensity_win_y  | GVKEY.focal + year_modified , data= df_2001,  vcov = "hetero"
+   )
+
+)
+
+
+mean(df_2001$common_analysts_focal, na.rm = TRUE)
+
+
+sd(df_2001$common_analysts_focal, na.rm = TRUE)
+
+
+
+number_of_unique_gvkey_focal <- df_2001 %>%
+  dplyr::summarise(n_distinct(GVKEY.focal))
+
+# To print the number
+print(number_of_unique_gvkey_focal)
+
+ variable_order <- c(
+  "^Rival move away$",
+  "Recommendation upgrades of rival's move",
+  "Sum",
+  "Rival analyst coverage" ,
+  "Analyst overlap"
+)
+
+
+
+etable_result1 <- etable(models,
+order = variable_order,
+  dict = c(
+    slack_avail_win_x = "Focal firm slack",
+    peer_move_similarity_move_toward = "Rival move toward",
+    focal_move_similarity_lagged = "Focal firm move lagged",
+    meanrec_diff_90_previous_focal = "Focal firm mean recom change",
+    peer_move_similarity_move_away = "Rival move away",
+    forecast_dispersion_focal = "Focal firm forecast dispersion",
+    log_at_win_x = "Focal firm total assets",
+    log_at_rel_win = "Relative total assets",
+    slack_avail_win_y = "Rival firm slack",
+    roa_win_x = "Focal firm ROA",
+    roa_rel = "Relative ROA",
+    moving_toward_industry = "Focal firm movement toward trends",
+    similarity_f0_p0 = "Initial strategic similarity t0",
+    rd_intensity_win_x = "Focal firm R&D intensity",
+    rd_intensity_win_y = "Rival firm R&D intensity",
+    common_analysts_focal = "Analyst overlap",
+    up_after_360 = "Recommendation upgrades of rival's move (yearly)",
+    up_after_90 = "Recommendation upgrades of rival's move (quarterly)",
+    analysts_peer_number = "Rival analyst coverage",
+    `peer_move_similarity_move_away x up_after_360` = "Rival move away*Recommendation upgrades of rival's move",
+    `peer_move_similarity_move_away x common_analysts_focal` = "Rival move away*Analyst overlap",
+    `peer_move_similarity_move_away x analysts_peer_number` = "Rival move away*Rival analysts coverage",
+    focal_move_similarity = "Focal firm repositioning", 
+    mergers_win_x = "Focal firm mergers expenditures",
+    GVKEY.focal	= "Focal firm", 
+    year_modified = "Year",
+    typicality_4_focal_t1= "Focal firm typicality t1", 
+    typicality_4_focal_t2= "Focal firm typicality t2", 
+    typicality_4_peer_t1 = "Peer firm typicality",
+    avg_change_size_3y_focal = 'Focal firm change size average in the past three years', 
+    strategy_unique_peer = 'Rival strategy uniqueness',
+    strategy_unique_focal = 'Focal firm strategy uniqueness', 
+    recom_update = 'Sum of recommendation',
+    car3 = 'Rival firm abnormal return',
+    sales_growth_naicsh4_win_x = 'Focal firm industry sales growth' ,
+    sales_growth_naicsh4_y = 'Rival firm industry sales growth',
+    hhi_naicsh4_inv_win_x = 'Focal firm industry competition (1-hhi)',
+    rd_10_win = "R&D intensity 10",
+    rd_15_win = "R&D intensity 15",
+    rd_intensity_industry_6 = "R&D intensity 6 focal"
+  ),
+  digits= "r3",
+   vcov = "hetero")  %>%
+  kbl() %>%
+  kable_classic_2(html_font = "Cambria", full_width = FALSE) %>%
+  footnote(general = "Significance levels: *p<0.05, **p<0.01, ***p<0.001", 
+           general_title = "Note: ")
+
+
+etable_result1
+
+ 
+```
+
+
+
+
+# 2) move_toward with robustness controls:
+
+```{r}
+
+
+  models1 <- list (
+
+  "Model 7" = feols (focal_move_similarity ~ 
+  roa_win_x + roa_rel +   log_at_win_x + log_at_rel_win + 
+  slack_avail_win_x + slack_avail_win_y + 
+  rd_intensity_win_x + rd_intensity_win_y + 
+   meanrec_diff_90_previous_focal 	+ car3 + strategy_unique_peer + strategy_unique_focal + sales_growth_naicsh4_win_x + hhi_naicsh4_inv_win_x +
+   similarity_f0_p0  + typicality_4_focal_t1   + typicality_4_focal_t2 + avg_change_size_3y_focal + 
+  moving_toward_industry  | GVKEY.focal + year_modified , data= df_2001, vcov= 'hetero'),
+  
+  "Model 8" = feols (focal_move_similarity ~  car3 + sales_growth_naicsh4_win_x +
+  peer_move_similarity_move_toward 	  +  meanrec_diff_90_previous_focal   + typicality_4_focal_t1    + typicality_4_focal_t2 + 
+  avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal  + hhi_naicsh4_inv_win_x  + 
+  log_at_win_x + log_at_rel_win + slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry 
+  + similarity_f0_p0 +  rd_intensity_win_x + rd_intensity_win_y +  focal_move_similarity_lagged  | GVKEY.focal + year_modified , data= df_2001, vcov= 'hetero'),
+
+    "Model 9" = feols (focal_move_similarity ~ car3 + peer_move_similarity_move_toward  + meanrec_diff_90_previous_focal  + 
+  rd_5_win + rd_5_win * peer_move_similarity_move_toward  +  hhi_naicsh4_inv_win_x  + 
+  log_at_win_x + log_at_rel_win  + typicality_4_focal_t1    + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry
+   + similarity_f0_p0 + rd_intensity_win_x + rd_intensity_win_y +  focal_move_similarity_lagged  | GVKEY.focal + year_modified , data= df_2001,  vcov = "hetero"
+   ),
+
+   "Model 10" = feols (focal_move_similarity ~ car3  +  sales_growth_naicsh4_win_x +
+  peer_move_similarity_move_toward	  + meanrec_diff_90_previous_focal + 
+  common_analysts_focal +   rd_intensity_win_x + rd_intensity_win_y  + typicality_4_focal_t1    + typicality_4_focal_t2 + 
+  avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal +  hhi_naicsh4_inv_win_x  + 
+  log_at_win_x + log_at_rel_win + common_analysts_focal * peer_move_similarity_move_toward +
+  slack_avail_win_x + slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + 
+  similarity_f0_p0 +  focal_move_similarity_lagged | GVKEY.focal + year_modified , data= df_2001, vcov= 'hetero'
+   ),
+
+   "Model 11" = feols (focal_move_similarity ~ car3  +  sales_growth_naicsh4_win_x +
+   peer_move_similarity_move_toward	  +  meanrec_diff_90_previous_focal  +  hhi_naicsh4_inv_win_x  + 
+   rd_intensity_win_y + typicality_4_focal_t1    + typicality_4_focal_t2 + avg_change_size_3y_focal + strategy_unique_peer + strategy_unique_focal + 
+  log_at_win_x + log_at_rel_win  +   rd_5_win + rd_5_win * peer_move_similarity_move_toward + 
+  slack_avail_win_x + slack_avail_win_y  + roa_rel + common_analysts_focal +   
+  common_analysts_focal * peer_move_similarity_move_toward  +
+   similarity_f0_p0  + 
+   roa_win_x + 
+     moving_toward_industry
+    + rd_intensity_win_x +  focal_move_similarity_lagged  | GVKEY.focal + year_modified  , data= df_2001,
+    vcov= 'hetero'
+   )
+
+)
+
+
+variable_order <- c(
+  "^Rival move toward$",
+  "R&D intensity of the environment",
+  'Rival firm industry competition',
+  'Rival firm industry homogeneity',
+  'Focal firm industry homogeneity',
+  "Analyst overlap"
+)
+
+
+etable_result <- etable(models1,
+order = variable_order,
+  dict = c(
+    slack_avail_win_x = "Focal firm slack",
+    focal_move_similarity_lagged = "Focal firm move lagged",
+    peer_move_similarity_move_toward = "Rival move toward",
+    log_at_win_x = "Focal firm total assets",
+    log_at_rel_win = "Relative total assets",
+    slack_avail_win_y = "Rival firm slack",
+    meanrec_diff_90_previous_focal= "Focal firm mean recom change",
+    roa_win_x = "Focal firm ROA",
+    roa_rel = "Relative ROA",
+    moving_toward_industry = "Focal firm movement toward trends",
+    similarity_f0_p0 = "Initial strategic similarity t0",
+    rd_intensity_win_x = "Focal firm R&D intensity",
+    rd_intensity_win_y = "Rival R&D intensity",
+    common_analysts_focal = "Analyst overlap",
+    rd_5_win = "R&D intensity of the environment",
+    rd_10_win = "R&D intensity of the environment",
+    `Rival move toward x Common analysts` = "Rival move toward*Analyst overlap",
+    `Rival move toward x rd_5` = "Rival move toward*R&D intensity of the environment",
+      mergers_win_x = "Focal firm mergers expenditures",
+    focal_move_similarity = "Focal firm repositioning", 
+    GVKEY.focal	= "Focal firm", 
+    year_modified = "Year",
+    typicality_4_focal_t1= "Focal firm typicality t1", 
+    typicality_4_focal_t2= "Focal firm typicality t2", 
+    typicality_4_peer_t1= "Peer firm typicality", 
+    avg_change_size_3y_focal = 'Focal firm change size average in the past three years', 
+    strategy_unique_peer = 'Rival strategy uniqueness',
+    strategy_unique_focal = 'Focal firm strategy uniqueness', 
+    recom_update = 'Sum of recommendation',
+    car3 = 'Rival firm abnormal return',
+    sales_growth_naicsh4_win_x = 'Focal firm industry sales growth' ,
+    sales_growth_naicsh4_y = 'Rival firm industry sales growth',
+    hhi_naicsh4_inv_win_y = 'Rival firm industry competition (1-hhi)',
+    hetero_naicsh4_peer= 'Rival firm industry heterogeneity',
+    hhi_naicsh4_inv_win_x = 'Focal firm industry competition (1-hhi)',
+    homogeneity_sumsim_naicsh4_focal = 'Focal firm industry homogeneity'
+  ),
+  digits= "r3",
+  vcov = "hetero") %>%
+ kbl() %>%
+  kable_classic_2(
+    html_font = "Cambria",
+    full_width = F
+  )%>%
+footnote(general = "Significance levels: *p<0.05, **p<0.01, ***p<0.001", 
+         general_title = "Note: ")
+
+
+
+etable_result
+
+
+```
+
+
+  
+
+
+
+############ PLOT ############
+############ PLOT ############
+############ PLOT ############
+############ PLOT ############
+############ PLOT ############
+############ PLOT ############
+
+```{r}
+
+
+generate_plot_away_meanSDD <- function(df, moderation_var, moderation_var_name) {
+  
+  # Define range for peer_move_similarity
+  peer_range <- seq(min(df$peer_move_similarity_move_away, na.rm = TRUE), 
+                    max(df$peer_move_similarity_move_away, na.rm = TRUE), length.out = 1000)
+  
+  # Prepare prediction data template
+  prediction_data <- data.frame(peer_move_similarity_move_away = peer_range)
+  
+  # Calculate mean and standard deviation for the moderation variable
+  moderation_mean <- mean(df[[moderation_var]], na.rm = TRUE)
+  moderation_sd <- sd(df[[moderation_var]], na.rm = TRUE)
+
+  # Define levels for moderation variable based on mean and SD
+  moderation_levels <- c("Average" = moderation_mean, 
+                         "Low" = max(moderation_mean - moderation_sd, 0), 
+                         "High" = moderation_mean + moderation_sd)
+
+
+
+  # Set control variables to their means
+  control_vars <- c( "meanrec_diff_90_previous_focal", 
+                    "log_at_win_x", "log_at_rel_win", "slack_avail_win_x", "slack_avail_win_y",
+                    "roa_win_x", "roa_rel", "moving_toward_industry", "similarity_f0_p0", 
+                    "rd_intensity_win_x", "rd_intensity_win_y", "car3", "strategy_unique_peer" , "strategy_unique_focal" , 
+                    "hhi_naicsh4_inv_win_x", "typicality_4_focal_t1", "typicality_4_focal_t2" , "avg_change_size_3y_focal", "sales_growth_naicsh4_win_x")
+
+
+  for (var in control_vars) {
+      prediction_data[[var]] <- mean(df[[var]], na.rm = TRUE)
+  }
+  
+  # Set levels for fixed effects
+  common_level_GVKEY_focal <- as.numeric(names(sort(table(df$GVKEY.focal), decreasing = TRUE)[1]))
+  common_year_modified <- as.numeric(names(sort(table(df$year_modified), decreasing = TRUE)[1]))
+  
+  prediction_data$GVKEY.focal <- common_level_GVKEY_focal
+  prediction_data$year_modified <- common_year_modified
+  
+  # Create the formula dynamically based on the input moderation variable
+  formula_string <- paste0("focal_move_similarity ~ peer_move_similarity_move_away + meanrec_diff_90_previous_focal + ", 
+                           moderation_var, " + ", moderation_var, " * peer_move_similarity_move_away + log_at_win_x + log_at_rel_win + slack_avail_win_x + 
+                           slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + similarity_f0_p0 + 
+                           rd_intensity_win_x + rd_intensity_win_y + car3 + strategy_unique_peer + strategy_unique_focal + hhi_naicsh4_inv_win_x +
+                           sales_growth_naicsh4_win_x +
+                     typicality_4_focal_t1 + typicality_4_focal_t2 + avg_change_size_3y_focal | GVKEY.focal + year_modified")
+
+  formula_obj <- as.formula(formula_string)
+  
+  # Model
+  model <- feols(formula_obj, data = df, vcov = "hetero")
+  
+  # Predictions and slopes for different levels
+  prediction_dfs <- list()
+  slopes <- numeric(length(moderation_levels))
+  
+  for(level in names(moderation_levels)) {
+    current_data <- prediction_data
+    current_data[[moderation_var]] <- moderation_levels[level]
+    current_data$predicted <- predict(model, newdata = current_data)
+    current_data$Level <- level
+    prediction_dfs[[level]] <- current_data
+
+    # Choose two points to calculate the slope
+    point1 <- current_data[1, ]
+    point2 <- current_data[nrow(current_data), ]
+    slope <- (point2$predicted - point1$predicted) / (point2$peer_move_similarity_move_away - point1$peer_move_similarity_move_away)
+    slopes[level] <- slope
+  }
+  
+  all_predictions <- do.call(rbind, prediction_dfs)
+  
+  # Output slopes
+  slope_output <- setNames(slopes, names(moderation_levels))
+  cat("Slopes for each level of '", moderation_var_name, "':\n")
+  print(slope_output)
+
+
+  # Plot
+plot <- ggplot(all_predictions, aes(x = peer_move_similarity_move_away, y = predicted, color = Level)) +
+    geom_line() +
+    labs(y = "Focal firm repositioning", 
+         x = "Rival move away",
+         title = paste0("Moderation Effect of ", moderation_var_name),
+         color = paste0("Level of ", moderation_var_name)) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 24), 
+          axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),  # Adjust the size of the axis tick labels
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  
+  list(plot = plot, slopes = slope_output)
+  ggsave("my_plot2.pdf", plot, width = 9, height = 7.5)
+
+}
+
+
+
+```
+
+
+
+
+```{r}
+
+
+generate_plot_toward_meanSDD <- function(df, moderation_var, moderation_var_name) {
+  
+  # Define range for peer_move_similarity
+  peer_range <- seq(min(df$peer_move_similarity_move_toward, na.rm = TRUE), 
+                    max(df$peer_move_similarity_move_toward, na.rm = TRUE), length.out = 1000)
+  
+  # Prepare prediction data template
+  prediction_data <- data.frame(peer_move_similarity_move_toward = peer_range)
+  
+  # Calculate mean and standard deviation for the moderation variable
+  moderation_mean <- mean(df[[moderation_var]], na.rm = TRUE)
+  moderation_sd <- sd(df[[moderation_var]], na.rm = TRUE)
+
+  # Define levels for moderation variable based on mean and SD
+  moderation_levels <- c("Average" = moderation_mean, 
+                         "Low" = max(moderation_mean - moderation_sd, 0), 
+                         "High" = moderation_mean + moderation_sd)
+
+  # Set control variables to their means
+  control_vars <- c( "meanrec_diff_90_previous_focal", 
+                    "log_at_win_x", "log_at_rel_win", "slack_avail_win_x", "slack_avail_win_y",
+                    "roa_win_x", "roa_rel", "moving_toward_industry", "similarity_f0_p0", 
+                    "rd_intensity_win_x", "rd_intensity_win_y", "car3", 'strategy_unique_peer', 'strategy_unique_focal', 
+                    'hhi_naicsh4_inv_win_x', 'typicality_4_focal_t1', 'typicality_4_focal_t2','avg_change_size_3y_focal', 'sales_growth_naicsh4_win_x')
+
+  for (var in control_vars) {
+      prediction_data[[var]] <- mean(df[[var]], na.rm = TRUE)
+  }
+  
+  # Set levels for fixed effects
+  common_level_GVKEY_focal <- as.numeric(names(sort(table(df$GVKEY.focal), decreasing = TRUE)[1]))
+  common_year_modified <- as.numeric(names(sort(table(df$year_modified), decreasing = TRUE)[1]))
+  
+  prediction_data$GVKEY.focal <- common_level_GVKEY_focal
+  prediction_data$year_modified <- common_year_modified
+  
+  # Create the formula dynamically based on the input moderation variable
+  formula_string <- paste0("focal_move_similarity ~ peer_move_similarity_move_toward + ", 
+                           moderation_var, " + ", moderation_var, " * peer_move_similarity_move_toward + meanrec_diff_90_previous_focal + 
+                           log_at_win_x + log_at_rel_win + slack_avail_win_x + 
+                           slack_avail_win_y + roa_win_x + roa_rel + moving_toward_industry + similarity_f0_p0  +
+                           rd_intensity_win_x + rd_intensity_win_y + car3 + strategy_unique_peer + strategy_unique_focal + sales_growth_naicsh4_win_x + 
+                    hhi_naicsh4_inv_win_x + typicality_4_focal_t1 + typicality_4_focal_t2 + avg_change_size_3y_focal | GVKEY.focal + year_modified")
+ 
+  formula_obj <- as.formula(formula_string)
+  
+  # Model
+  model <- feols(formula_obj, data = df, vcov = "hetero")
+  
+  # Predictions and slopes for different levels
+  prediction_dfs <- list()
+  slopes <- numeric(length(moderation_levels))
+  
+  for(level in names(moderation_levels)) {
+    current_data <- prediction_data
+    current_data[[moderation_var]] <- moderation_levels[level]
+    current_data$predicted <- predict(model, newdata = current_data)
+    current_data$Level <- level
+    prediction_dfs[[level]] <- current_data
+
+    # Choose two points to calculate the slope
+    point1 <- current_data[1, ]
+    point2 <- current_data[nrow(current_data), ]
+    slope <- (point2$predicted - point1$predicted) / (point2$peer_move_similarity_move_toward - point1$peer_move_similarity_move_toward)
+    slopes[level] <- slope
+  }
+  
+  all_predictions <- do.call(rbind, prediction_dfs)
+  
+  # Output slopes
+  slope_output <- setNames(slopes, names(moderation_levels))
+
+  cat("Slopes for each level of '", moderation_var_name, "':\n")
+  print(slope_output)
+
+
+  # Plot
+plot <- ggplot(all_predictions, aes(x = peer_move_similarity_move_toward, y = predicted, color = Level)) +
+    geom_line() +
+    labs(y = "Focal firm repositioning", 
+         x = "Rival move toward",
+         title = paste0("Moderation Effect of ", moderation_var_name),
+         color = paste0("Level of ", moderation_var_name)) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 24), 
+          axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),  # Adjust the size of the axis tick labels
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  list(plot = plot, slopes = slope_output)
+
+ggsave("my_plot.pdf", plot, width = 9, height = 7.5)
+
+}
+
+
+```
+
+
+```{r}
+# My plot 2 for move away
+# My plot 1 for move toward
+
+# Move_away plots
+
+generate_plot_away_meanSDD (df_2001, "up_after_360", "Recommendation upgrade of a rival's move")
+
+generate_plot_away_meanSDD (df_2001, "common_analysts_focal", "Analyst overlap")
+
+generate_plot_away_meanSDD (df_2001, "analysts_peer_number", "Analyst coverage of rival")
+
+
+# Move_toward plots
+
+generate_plot_toward_meanSDD (df_2001, "rd_5_win", "R&D intensity of the environment")
+
+generate_plot_toward_meanSDD (df_2001, "common_analysts_focal", "Analyst overlap")
+
+```
+
+
